@@ -9,6 +9,17 @@
 #include <array>
 #include <iostream>
 
+#include <time.h>
+
+
+
+// Interfaces with GPIO
+#include "matrix_hal/gpio_control.h"
+// Communicates with MATRIX device
+#include "matrix_hal/matrixio_bus.h"
+
+
+
 namespace hal = matrix_hal;
 
 // ENERGY_COUNT : Number of sound energy slots to maintain.
@@ -22,7 +33,39 @@ namespace hal = matrix_hal;
 // MAX_BRIGHTNESS: Filters out low energy
 #define MIN_THRESHOLD 10
 // MAX_BRIGHTNESS: 0 - 255
-#define MAX_BRIGHTNESS 50
+#define MAX_BRIGHTNESS 25
+
+// Granularity of servo increments
+#define GRANULARITY 2
+
+// GPIOOutputMode is 1
+const uint16_t GPIOOutputMode = 1;
+// GPIOInputMode is 0
+const uint16_t GPIOInputMode = 0;
+
+// PWMFunction is 1
+const uint16_t PWMFunction = 1;
+
+// Holds desired PWM frequency
+float frequency;
+// Holds desired PWM duty percentage
+float percentage;
+// Holds desired GPIO pin [0-15]
+const uint16_t pin = 4;
+// Holds desired servo angle
+int target_servo_angle = 0;
+
+// Holds servo minimum pulse length (for calibration)
+float min_pulse_ms = 0.8;
+
+//threshold for energy
+int max_energy;
+
+//store previous angle
+int old_servo_angle = 0;
+
+bool reached;
+
 
 double x, y, z, E;
 int energy_array[ENERGY_COUNT];
@@ -123,12 +166,21 @@ void json_parse(json_object *jobj) {
 }
 
 int main(int argc, char *argv[]) {
+  reached = true;
+
+
   // Everloop Initialization
   hal::MatrixIOBus bus;
   if (!bus.Init()) return false;
   hal::EverloopImage image1d(bus.MatrixLeds());
   hal::Everloop everloop;
   everloop.Setup(&bus);
+
+
+  // Create GPIOControl object
+  hal::GPIOControl gpio;
+  // Set gpio to use MatrixIOBus bus
+  gpio.Setup(&bus);
 
   // Clear all LEDs
   for (hal::LedValue &led : image1d.leds) {
@@ -138,6 +190,11 @@ int main(int argc, char *argv[]) {
     led.white = 0;
   }
   everloop.Write(&image1d);
+
+  // Set pin mode to output
+  gpio.SetMode(pin, GPIOOutputMode);
+  // Set pin function to PWM
+  gpio.SetFunction(pin, PWMFunction);
 
   char verbose = 0x00;
 
@@ -192,14 +249,44 @@ int main(int argc, char *argv[]) {
       int index_pots = led_angle * ENERGY_COUNT / 360;
       // Mapping from pots values to color
       int color = energy_array[index_pots] * MAX_BRIGHTNESS / MAX_VALUE;
+
+      //find led angle with max energy
+      if (color > max_energy && led_angle < 190 && reached == true) {
+        max_energy = color;
+        target_servo_angle = led_angle;
+      }
+
+
       // Removing colors below the threshold
       color = (color < MIN_THRESHOLD) ? 0 : color;
 
-      image1d.leds[i].red = 0;
+      image1d.leds[i].red = color;
       image1d.leds[i].green = 0;
       image1d.leds[i].blue = color;
       image1d.leds[i].white = 0;
+
     }
+
     everloop.Write(&image1d);
+
+    //set servo angle incrementally till you reach within 2 degrees of target
+    if (old_servo_angle < target_servo_angle-2) {
+        old_servo_angle += GRANULARITY;
+        reached = false;
+    } else if (old_servo_angle > target_servo_angle+2) {
+        old_servo_angle -= GRANULARITY;
+        reached = false;
+    } else {
+      reached = true;
+    }
+
+
+    gpio.SetServoAngle((float) (old_servo_angle), min_pulse_ms, pin);
+
+  
+    std::cout << "Angle : " << old_servo_angle << std::endl;
+
+    max_energy = 15;
+
   }
 }
