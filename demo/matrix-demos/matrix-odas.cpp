@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
       // Removing colors below the threshold
       color = (color < MIN_THRESHOLD) ? 0 : color;
 
-      image1d.leds[i].red = color;
+      image1d.leds[i].red = 0;
       image1d.leds[i].green = 0;
       image1d.leds[i].blue = color;
       image1d.leds[i].white = 0;
