@@ -56,7 +56,7 @@ const uint16_t pin = 4;
 int target_servo_angle = 0;
 
 // Holds servo minimum pulse length (for calibration)
-float min_pulse_ms = 0.8;
+float min_pulse_ms = 0.5;
 
 //threshold for energy
 int max_energy;
