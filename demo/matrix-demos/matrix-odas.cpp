@@ -85,6 +85,10 @@ void json_parse_array(json_object *jobj, char *key) {
 void json_parse(json_object *jobj) {
   enum json_type type;
   unsigned int count = 0;
+  if (json_object_get_type(jobj) != json_type_object) {
+    printf("Error parsing json object: Type is not object\n");
+    return;
+  }
   decrease_pots();
   json_object_object_foreach(jobj, key, val) {
     type = json_object_get_type(val);
@@ -176,12 +180,17 @@ int main(int argc, char *argv[]) {
 
   printf("Receiving data........... \n\n");
 
-  while ((messageSize = recv(connection_id, message, nBytes, 0)) > 0) {
+  while ((messageSize = recv(connection_id, message, nBytes-1, 0)) > 0) {
     message[messageSize] = 0x00;
 
     // printf("message: %s\n\n", message);
     json_object *jobj = json_tokener_parse(message);
+    if (jobj == NULL) {
+      printf("Error parsing json object: Failed to parse tokens\n");
+      continue;
+    }
     json_parse(jobj);
+    json_object_put(jobj);
 
     for (int i = 0; i < bus.MatrixLeds(); i++) {
       // led index to angle
